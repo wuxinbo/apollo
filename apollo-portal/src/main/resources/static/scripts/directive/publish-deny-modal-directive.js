@@ -3,7 +3,7 @@ directive_module.directive('publishdenymodal', publishDenyDirective);
 function publishDenyDirective(AppUtil, EventManager) {
     return {
         restrict: 'E',
-        templateUrl: '../../views/component/publish-deny-modal.html',
+        templateUrl: AppUtil.prefixPath() + '/views/component/publish-deny-modal.html',
         transclude: true,
         replace: true,
         scope: {
@@ -24,10 +24,10 @@ function publishDenyDirective(AppUtil, EventManager) {
                 AppUtil.hideModal(MODAL_ID);
 
                 EventManager.emit(EventManager.EventType.EMERGENCY_PUBLISH,
-                                  {
-                                      mergeAndPublish: scope.mergeAndPublish,
-                                      namespace: scope.toReleaseNamespace
-                                  });
+                    {
+                        mergeAndPublish: scope.mergeAndPublish,
+                        namespace: scope.toReleaseNamespace
+                    });
 
             }
         }

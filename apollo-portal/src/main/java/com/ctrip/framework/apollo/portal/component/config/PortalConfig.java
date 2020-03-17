@@ -1,36 +1,43 @@
 package com.ctrip.framework.apollo.portal.component.config;
 
 
+import com.ctrip.framework.apollo.common.config.RefreshableConfig;
+import com.ctrip.framework.apollo.common.config.RefreshablePropertySource;
+import com.ctrip.framework.apollo.portal.entity.vo.Organization;
+import com.ctrip.framework.apollo.portal.environment.Env;
+import com.ctrip.framework.apollo.portal.service.PortalDBPropertySource;
+import com.ctrip.framework.apollo.portal.service.SystemRoleManagerService;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
-import com.ctrip.framework.apollo.common.config.RefreshableConfig;
-import com.ctrip.framework.apollo.common.config.RefreshablePropertySource;
-import com.ctrip.framework.apollo.core.enums.Env;
-import com.ctrip.framework.apollo.portal.entity.vo.Organization;
-import com.ctrip.framework.apollo.portal.service.PortalDBPropertySource;
-
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Type;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 @Component
 public class PortalConfig extends RefreshableConfig {
+
+  private static final Logger logger = LoggerFactory.getLogger(PortalConfig.class);
 
   private Gson gson = new Gson();
   private static final Type ORGANIZATION = new TypeToken<List<Organization>>() {
   }.getType();
 
-  @Autowired
-  private PortalDBPropertySource portalDBPropertySource;
+  /**
+   * meta servers config in "PortalDB.ServerConfig"
+   */
+  private static final Type META_SERVERS = new TypeToken<Map<String, String>>(){}.getType();
+
+  private final PortalDBPropertySource portalDBPropertySource;
+
+  public PortalConfig(final PortalDBPropertySource portalDBPropertySource) {
+    this.portalDBPropertySource = portalDBPropertySource;
+  }
 
   @Override
   public List<RefreshablePropertySource> getRefreshablePropertySources() {
@@ -45,10 +52,32 @@ public class PortalConfig extends RefreshableConfig {
     List<Env> envs = Lists.newLinkedList();
 
     for (String env : configurations) {
-      envs.add(Env.fromString(env));
+      envs.add(Env.addEnvironment(env));
     }
 
     return envs;
+  }
+
+  /**
+   * @return the relationship between environment and its meta server. empty if meet exception
+   */
+  public Map<String, String> getMetaServers() {
+    final String key = "apollo.portal.meta.servers";
+    String jsonContent = getValue(key);
+    if(null == jsonContent) {
+      return Collections.emptyMap();
+    }
+
+    // watch out that the format of content may be wrong
+    // that will cause exception
+    Map<String, String> map = Collections.emptyMap();
+    try {
+      // try to parse
+      map = gson.fromJson(jsonContent, META_SERVERS);
+    } catch (Exception e) {
+      logger.error("wrong format with key: {}", key);
+    }
+    return map;
   }
 
   public List<String> superAdmins() {
@@ -72,6 +101,18 @@ public class PortalConfig extends RefreshableConfig {
     }
 
     return result;
+  }
+
+  public boolean isConfigViewMemberOnly(String env) {
+    String[] configViewMemberOnlyEnvs = getArrayProperty("configView.memberOnly.envs", new String[0]);
+
+    for (String memberOnlyEnv : configViewMemberOnlyEnvs) {
+      if (memberOnlyEnv.equalsIgnoreCase(env)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /***
@@ -157,6 +198,14 @@ public class PortalConfig extends RefreshableConfig {
 
   public boolean canAppAdminCreatePrivateNamespace() {
     return getBooleanProperty("admin.createPrivateNamespace.switch", true);
+  }
+
+  public boolean isCreateApplicationPermissionEnabled() {
+    return getBooleanProperty(SystemRoleManagerService.CREATE_APPLICATION_LIMIT_SWITCH_KEY, false);
+  }
+
+  public boolean isManageAppMasterPermissionEnabled() {
+    return getBooleanProperty(SystemRoleManagerService.MANAGE_APP_MASTER_LIMIT_SWITCH_KEY, false);
   }
 
   /***

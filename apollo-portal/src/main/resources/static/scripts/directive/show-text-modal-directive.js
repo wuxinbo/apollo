@@ -1,9 +1,9 @@
 directive_module.directive('showtextmodal', showTextModalDirective);
 
-function showTextModalDirective() {
+function showTextModalDirective(AppUtil) {
     return {
         restrict: 'E',
-        templateUrl: '../../views/component/show-text-modal.html',
+        templateUrl: AppUtil.prefixPath() + '/views/component/show-text-modal.html',
         transclude: true,
         replace: true,
         scope: {
@@ -21,11 +21,10 @@ function showTextModalDirective() {
 
             function isJsonText(text) {
                 try {
-                    JSON.parse(text);
+                    return typeof JSON.parse(text) === "object";
                 } catch (e) {
                     return false;
                 }
-                return true;
             }
         }
     }

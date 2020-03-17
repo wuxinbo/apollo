@@ -78,7 +78,7 @@ p, td, span {
     color: #797979;
 }
 
-pre {
+pre, .pre {
     white-space: pre-wrap; /* Since CSS 2.1 */
     white-space: -moz-pre-wrap; /* Mozilla, since 1999 */
     white-space: -pre-wrap; /* Opera 4-6 */
@@ -297,13 +297,17 @@ table th {
 
 .project-info th {
     text-align: right;
-    padding: 4px 6px;
-    white-space: nowrap;
+    padding: 4px 2px;
+    width: 5em;
 }
 
 .project-info td {
     border-bottom: 1px dotted gray;
     padding: 4px 6px;
+}
+
+.project-info td span {
+    margin-right: 5px;
 }
 
 #config-info {
@@ -403,9 +407,7 @@ table th {
 }
 
 .namespace-panel .namespace-attribute-public {
-    background: #31708f;
-    width: 40px;
-    cursor: pointer;
+    margin-right:5px;
 }
 
 .namespace-panel .second-panel-heading .nav-tabs {
@@ -501,6 +503,10 @@ table th {
 
 .list-group-item .icon-project-manage {
     background: url(../img/manage.png) no-repeat;
+}
+
+.list-group-item .icon-accesskey-manage {
+    background: url(../img/secret.png) no-repeat;
 }
 
 .list-group-item .icon-plus-orange {
@@ -652,7 +658,7 @@ table th {
 .release-history .operation-caption {
     position: absolute;
     top: 45px;
-    width: 75px;
+    width: 100px;
     height: 18px;
     color: #fff;
     font-size: 12px;
@@ -801,5 +807,14 @@ table th {
 
 .project-setting .panel-body .context {
     padding-left: 30px;
+    padding-right: 30px;
 }
 
+.app-search-list .select2-container, .app-search-list .select2-container .select2-selection {
+    height: 34px;
+}
+
+.app-search-list .select2-container .select2-selection .select2-selection__rendered {
+    line-height: 34px;
+    font-size: 14px;
+}

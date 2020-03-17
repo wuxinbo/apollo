@@ -1,8 +1,12 @@
 package com.ctrip.framework.apollo.internals;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.ctrip.framework.apollo.build.MockInjector;
+import com.ctrip.framework.apollo.enums.ConfigSourceType;
+import com.ctrip.framework.apollo.util.factory.PropertiesFactory;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -10,6 +14,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.runners.MockitoJUnitRunner;
 
 import com.ctrip.framework.apollo.Config;
@@ -19,19 +24,32 @@ import com.ctrip.framework.apollo.model.ConfigChange;
 import com.ctrip.framework.apollo.model.ConfigChangeEvent;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import org.mockito.stubbing.Answer;
 
 /**
  * @author Jason Song(song_s@ctrip.com)
  */
 @RunWith(MockitoJUnitRunner.class)
 public class SimpleConfigTest {
+
   private String someNamespace;
   @Mock
   private ConfigRepository configRepository;
+  @Mock
+  private PropertiesFactory propertiesFactory;
+  private ConfigSourceType someSourceType;
 
   @Before
   public void setUp() throws Exception {
     someNamespace = "someName";
+
+    when(propertiesFactory.getPropertiesInstance()).thenAnswer(new Answer<Properties>() {
+      @Override
+      public Properties answer(InvocationOnMock invocation) {
+        return new Properties();
+      }
+    });
+    MockInjector.setInstance(PropertiesFactory.class, propertiesFactory);
   }
 
   @Test
@@ -41,22 +59,28 @@ public class SimpleConfigTest {
     String someValue = "someValue";
     someProperties.setProperty(someKey, someValue);
 
+    someSourceType = ConfigSourceType.LOCAL;
+
     when(configRepository.getConfig()).thenReturn(someProperties);
+    when(configRepository.getSourceType()).thenReturn(someSourceType);
 
     SimpleConfig config = new SimpleConfig(someNamespace, configRepository);
 
     assertEquals(someValue, config.getProperty(someKey, null));
+    assertEquals(someSourceType, config.getSourceType());
   }
 
   @Test
   public void testLoadConfigFromConfigRepositoryError() throws Exception {
-    when(configRepository.getConfig()).thenThrow(Throwable.class);
+    String someKey = "someKey";
+    String anyValue = "anyValue" + Math.random();
+
+    when(configRepository.getConfig()).thenThrow(mock(RuntimeException.class));
 
     Config config = new SimpleConfig(someNamespace, configRepository);
 
-    String someKey = "someKey";
-    String anyValue = "anyValue" + Math.random();
     assertEquals(anyValue, config.getProperty(someKey, anyValue));
+    assertEquals(ConfigSourceType.NONE, config.getSourceType());
   }
 
   @Test
@@ -74,7 +98,10 @@ public class SimpleConfigTest {
     String someValueNew = "someValueNew";
     anotherProperties.putAll(ImmutableMap.of(someKey, someValueNew, newKey, newValue));
 
+    someSourceType = ConfigSourceType.LOCAL;
+
     when(configRepository.getConfig()).thenReturn(someProperties);
+    when(configRepository.getSourceType()).thenReturn(someSourceType);
 
     final SettableFuture<ConfigChangeEvent> configChangeFuture = SettableFuture.create();
     ConfigChangeListener someListener = new ConfigChangeListener() {
@@ -85,7 +112,13 @@ public class SimpleConfigTest {
     };
 
     SimpleConfig config = new SimpleConfig(someNamespace, configRepository);
+
+    assertEquals(someSourceType, config.getSourceType());
+
     config.addChangeListener(someListener);
+
+    ConfigSourceType anotherSourceType = ConfigSourceType.REMOTE;
+    when(configRepository.getSourceType()).thenReturn(anotherSourceType);
 
     config.onRepositoryChange(someNamespace, anotherProperties);
 
@@ -108,5 +141,7 @@ public class SimpleConfigTest {
     assertEquals(null, newKeyChange.getOldValue());
     assertEquals(newValue, newKeyChange.getNewValue());
     assertEquals(PropertyChangeType.ADDED, newKeyChange.getChangeType());
+
+    assertEquals(anotherSourceType, config.getSourceType());
   }
 }

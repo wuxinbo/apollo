@@ -1,19 +1,18 @@
 package com.ctrip.framework.apollo.portal.component;
 
 
-import com.ctrip.framework.apollo.core.MetaDomainConsts;
-import com.ctrip.framework.apollo.core.enums.Env;
+import com.ctrip.framework.apollo.portal.environment.PortalMetaDomainService;
+import com.ctrip.framework.apollo.portal.environment.Env;
 import com.ctrip.framework.apollo.core.utils.ApolloThreadFactory;
 import com.ctrip.framework.apollo.portal.api.AdminServiceAPI;
 import com.ctrip.framework.apollo.portal.component.config.PortalConfig;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -24,24 +23,30 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import javax.annotation.PostConstruct;
-
 @Component
 public class PortalSettings {
 
   private static final Logger logger = LoggerFactory.getLogger(PortalSettings.class);
   private static final int HEALTH_CHECK_INTERVAL = 10 * 1000;
 
-  @Autowired
-  ApplicationContext applicationContext;
-
-  @Autowired
-  private PortalConfig portalConfig;
+  private final ApplicationContext applicationContext;
+  private final PortalConfig portalConfig;
+  private final PortalMetaDomainService portalMetaDomainService;
 
   private List<Env> allEnvs = new ArrayList<>();
 
   //mark env up or down
   private Map<Env, Boolean> envStatusMark = new ConcurrentHashMap<>();
+
+  public PortalSettings(
+          final ApplicationContext applicationContext,
+          final PortalConfig portalConfig,
+          final PortalMetaDomainService portalMetaDomainService
+  ) {
+    this.applicationContext = applicationContext;
+    this.portalConfig = portalConfig;
+    this.portalMetaDomainService = portalMetaDomainService;
+  }
 
   @PostConstruct
   private void postConstruct() {
@@ -109,14 +114,14 @@ public class PortalSettings {
             }
           } else {
             logger.error("Env health check failed, maybe because of admin server down. env: {}, meta server address: {}", env,
-                        MetaDomainConsts.getDomain(env));
+                    portalMetaDomainService.getDomain(env));
             handleEnvDown(env);
           }
 
         } catch (Exception e) {
           logger.error("Env health check failed, maybe because of meta server down "
                        + "or configure wrong meta server address. env: {}, meta server address: {}", env,
-                       MetaDomainConsts.getDomain(env), e);
+                  portalMetaDomainService.getDomain(env), e);
           handleEnvDown(env);
         }
       }
@@ -134,17 +139,17 @@ public class PortalSettings {
 
       if (!envStatusMark.get(env)) {
         logger.error("Env is down. env: {}, failed times: {}, meta server address: {}", env, failedTimes,
-                     MetaDomainConsts.getDomain(env));
+                portalMetaDomainService.getDomain(env));
       } else {
         if (failedTimes >= ENV_DOWN_THRESHOLD) {
           envStatusMark.put(env, false);
           logger.error("Env is down because health check failed for {} times, "
                        + "which equals to down threshold. env: {}, meta server address: {}", ENV_DOWN_THRESHOLD, env,
-                       MetaDomainConsts.getDomain(env));
+                  portalMetaDomainService.getDomain(env));
         } else {
           logger.error(
               "Env health check failed for {} times which less than down threshold. down threshold:{}, env: {}, meta server address: {}",
-              failedTimes, ENV_DOWN_THRESHOLD, env, MetaDomainConsts.getDomain(env));
+              failedTimes, ENV_DOWN_THRESHOLD, env, portalMetaDomainService.getDomain(env));
         }
       }
 

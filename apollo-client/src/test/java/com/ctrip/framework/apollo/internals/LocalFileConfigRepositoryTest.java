@@ -9,6 +9,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ctrip.framework.apollo.enums.ConfigSourceType;
+import com.ctrip.framework.apollo.util.factory.PropertiesFactory;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -25,6 +27,8 @@ import com.ctrip.framework.apollo.util.ConfigUtil;
 import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.io.Files;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /**
  * Created by Jason on 4/9/16.
@@ -38,6 +42,7 @@ public class LocalFileConfigRepositoryTest {
   private static String someCluster = "someCluster";
   private String defaultKey;
   private String defaultValue;
+  private ConfigSourceType someSourceType;
 
   @Before
   public void setUp() throws Exception {
@@ -49,11 +54,21 @@ public class LocalFileConfigRepositoryTest {
     defaultKey = "defaultKey";
     defaultValue = "defaultValue";
     someProperties.setProperty(defaultKey, defaultValue);
+    someSourceType = ConfigSourceType.REMOTE;
     upstreamRepo = mock(ConfigRepository.class);
     when(upstreamRepo.getConfig()).thenReturn(someProperties);
+    when(upstreamRepo.getSourceType()).thenReturn(someSourceType);
 
     MockInjector.reset();
     MockInjector.setInstance(ConfigUtil.class, new MockConfigUtil());
+    PropertiesFactory propertiesFactory = mock(PropertiesFactory.class);
+    when(propertiesFactory.getPropertiesInstance()).thenAnswer(new Answer<Properties>() {
+      @Override
+      public Properties answer(InvocationOnMock invocation) {
+        return new Properties();
+      }
+    });
+    MockInjector.setInstance(PropertiesFactory.class, propertiesFactory);
   }
 
   @After
@@ -95,7 +110,7 @@ public class LocalFileConfigRepositoryTest {
     Properties properties = localRepo.getConfig();
 
     assertEquals(someValue, properties.getProperty(someKey));
-
+    assertEquals(ConfigSourceType.LOCAL, localRepo.getSourceType());
   }
 
   @Test
@@ -112,12 +127,12 @@ public class LocalFileConfigRepositoryTest {
     Properties properties = localRepo.getConfig();
 
     assertEquals(defaultValue, properties.getProperty(defaultKey));
+    assertEquals(someSourceType, localRepo.getSourceType());
   }
 
   @Test
   public void testLoadConfigWithNoLocalFile() throws Exception {
-    LocalFileConfigRepository
-        localFileConfigRepository =
+    LocalFileConfigRepository localFileConfigRepository =
         new LocalFileConfigRepository(someNamespace, upstreamRepo);
     localFileConfigRepository.setLocalCacheDir(someBaseDir, true);
 
@@ -126,6 +141,7 @@ public class LocalFileConfigRepositoryTest {
     assertThat(
         "LocalFileConfigRepository's properties should be the same as fallback repo's when there is no local cache",
         result.entrySet(), equalTo(someProperties.entrySet()));
+    assertEquals(someSourceType, localFileConfigRepository.getSourceType());
   }
 
   @Test
@@ -146,7 +162,7 @@ public class LocalFileConfigRepositoryTest {
     assertThat(
         "LocalFileConfigRepository should persist local cache files and return that afterwards",
         someProperties.entrySet(), equalTo(anotherProperties.entrySet()));
-
+    assertEquals(someSourceType, localRepo.getSourceType());
   }
 
   @Test
@@ -155,6 +171,9 @@ public class LocalFileConfigRepositoryTest {
 
     LocalFileConfigRepository localFileConfigRepository =
         new LocalFileConfigRepository(someNamespace, upstreamRepo);
+
+    assertEquals(someSourceType, localFileConfigRepository.getSourceType());
+
     localFileConfigRepository.setLocalCacheDir(someBaseDir, true);
     localFileConfigRepository.addChangeListener(someListener);
 
@@ -163,6 +182,9 @@ public class LocalFileConfigRepositoryTest {
     Properties anotherProperties = new Properties();
     anotherProperties.put("anotherKey", "anotherValue");
 
+    ConfigSourceType anotherSourceType = ConfigSourceType.NONE;
+    when(upstreamRepo.getSourceType()).thenReturn(anotherSourceType);
+
     localFileConfigRepository.onRepositoryChange(someNamespace, anotherProperties);
 
     final ArgumentCaptor<Properties> captor = ArgumentCaptor.forClass(Properties.class);
@@ -170,7 +192,7 @@ public class LocalFileConfigRepositoryTest {
     verify(someListener, times(1)).onRepositoryChange(eq(someNamespace), captor.capture());
 
     assertEquals(anotherProperties, captor.getValue());
-
+    assertEquals(anotherSourceType, localFileConfigRepository.getSourceType());
   }
 
   public static class MockConfigUtil extends ConfigUtil {

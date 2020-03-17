@@ -1,132 +1,107 @@
 /** navbar */
 directive_module.directive('apollonav',
-                           function ($compile, $window, toastr, AppUtil, AppService, EnvService, UserService, CommonService) {
-                               return {
-                                   restrict: 'E',
-                                   templateUrl: '../../views/common/nav.html',
-                                   transclude: true,
-                                   replace: true,
-                                   link: function (scope, element, attrs) {
+    function ($compile, $window, $translate, toastr, AppUtil, AppService, EnvService,
+        UserService, CommonService, PermissionService) {
+        return {
+            restrict: 'E',
+            templateUrl: AppUtil.prefixPath() + '/views/common/nav.html',
+            transclude: true,
+            replace: true,
+            link: function (scope, element, attrs) {
 
-                                       CommonService.getPageSetting().then(function (setting) {
-                                           scope.pageSetting = setting;
-                                       });
+                CommonService.getPageSetting().then(function (setting) {
+                    scope.pageSetting = setting;
+                });
 
-                                       scope.sourceApps = [];
-                                       scope.copyedApps = [];
+               // Looks like a trick to make xml/yml/json namespaces display right, but why?
+               $(document).on('click', function () {
+                   scope.$apply(function () {});
+               });
 
-                                       AppService.find_apps().then(function (result) {
-                                           result.forEach(function (app) {
-                                               app.selected = false;
-                                               scope.sourceApps.push(app);
-                                           });
-                                           scope.copyedApps = angular.copy(scope.sourceApps);
-                                       }, function (result) {
-                                           toastr.error(AppUtil.errorMsg(result), "load apps error");
-                                       });
+               $translate('ApolloConfirmDialog.SearchPlaceHolder').then(function(placeholderLabel)  {
+                   $('#app-search-list').select2({
+                      placeholder: placeholderLabel,
+                      ajax: {
+                        url: AppUtil.prefixPath() + "/apps/search/by-appid-or-name",
+                        dataType: 'json',
+                        delay: 400,
+                        data: function (params) {
+                            return {
+                                query: params.term || '',
+                                page: params.page ? params.page - 1 : 0,
+                                    size: 20
+                                };
+                            },
+                            processResults: function (data) {
+                                if (data && data.content) {
+                                    var hasMore = data.content.length
+                                        === data.size;
+                                    var result = [];
+                                    data.content.forEach(function (app) {
+                                        result.push({
+                                            id: app.appId,
+                                            text: app.appId + ' / ' + app.name
+                                        })
+                                    });
+                                    return {
+                                        results: result,
+                                        pagination: {
+                                            more: hasMore
+                                        }
+                                    };
+                                } else {
+                                    return {
+                                        results: [],
+                                        pagination: {
+                                            more: false
+                                        }
+                                    };
+                                }
 
-                                       scope.searchKey = '';
-                                       scope.shouldShowAppList = false;
+                            }
+                        }
+                    });
 
-                                       var selectedApp = {};
-                                       scope.selectApp = function (app) {
-                                           select(app);
-                                           scope.jumpToConfigPage();
-                                       };
+                    $('#app-search-list').on('select2:select', function () {
+                        var selected = $('#app-search-list').select2('data');
+                        if (selected && selected.length) {
+                            jumpToConfigPage(selected[0].id)
+                        }
+                    });
+                });
 
-                                       scope.changeSearchKey = function () {
-                                           scope.copyedApps = [];
-                                           var searchKey = scope.searchKey.toLocaleLowerCase();
-                                           scope.sourceApps.forEach(function (app) {
-                                               if (app.name.toLocaleLowerCase().indexOf(searchKey) > -1
-                                                   || app.appId.toLocaleLowerCase().indexOf(searchKey) > -1) {
-                                                   scope.copyedApps.push(app);
-                                               }
-                                           });
-                                           scope.shouldShowAppList = true;
-                                       };
+                function jumpToConfigPage(selectedAppId) {
+                    if ($window.location.href.indexOf("config.html") > -1) {
+                        $window.location.hash = "appid=" + selectedAppId;
+                        $window.location.reload();
+                    } else {
+                        $window.location.href = AppUtil.prefixPath() + '/config.html?#appid=' + selectedAppId;
+                    }
+                };
 
-                                       scope.jumpToConfigPage = function () {
-                                           if (selectedApp.appId) {
-                                               if ($window.location.href.indexOf("config.html") > -1) {
-                                                   $window.location.hash = "appid=" + selectedApp.appId;
-                                                   $window.location.reload();
-                                               } else {
-                                                   $window.location.href = '/config.html?#appid=' + selectedApp.appId;
-                                               }
-                                           }
-                                       };
+                UserService.load_user().then(function (result) {
+                    scope.userName = result.userId;
+                }, function (result) {
 
-                                       //up:38 down:40 enter:13
-                                       var selectedAppIdx = -1;
-                                       element.bind("keydown keypress", function (event) {
+                });
 
-                                           if (event.keyCode == 40) {
-                                               if (selectedAppIdx < scope.copyedApps.length - 1) {
-                                                   clearAppsSelectedStatus();
-                                                   scope.copyedApps[++selectedAppIdx].selected = true;
-                                               }
-                                           } else if (event.keyCode == 38) {
-                                               if (selectedAppIdx >= 1) {
-                                                   clearAppsSelectedStatus();
-                                                   scope.copyedApps[--selectedAppIdx].selected = true;
-                                               }
-                                           } else if (event.keyCode == 13) {
-                                               if (scope.shouldShowAppList && selectedAppIdx > -1) {
-                                                   select(scope.copyedApps[selectedAppIdx]);
-                                                   event.preventDefault();
-                                               } else {
-                                                   scope.jumpToConfigPage();
-                                               }
+                PermissionService.has_root_permission().then(function (result) {
+                    scope.hasRootPermission = result.hasPermission;
+                })
 
-                                           }
-                                           //强制刷新
-                                           scope.$apply(function () {
-                                               scope.copyedApps = scope.copyedApps;
-                                           });
-                                       });
+                scope.changeLanguage = function (lang) {
+                    $translate.use(lang)
+                }
+            }
+        }
 
-                                       $(".search-input").on("click", function (event) {
-                                           event.stopPropagation();
-                                       });
-
-                                       $(document).on('click', function () {
-                                           scope.$apply(function () {
-                                               scope.shouldShowAppList = false;
-                                           });
-                                       });
-
-                                       function clearAppsSelectedStatus() {
-                                           scope.copyedApps.forEach(function (app) {
-                                               app.selected = false;
-                                           })
-
-                                       }
-
-                                       function select(app) {
-                                           selectedApp = app;
-                                           scope.searchKey = app.name;
-                                           scope.shouldShowAppList = false;
-                                           clearAppsSelectedStatus();
-                                           selectedAppIdx = -1;
-
-                                       }
-
-                                       UserService.load_user().then(function (result) {
-                                           scope.userName = result.userId;
-                                       }, function (result) {
-
-                                       });
-                                   }
-                               }
-
-                           });
+    });
 
 /** env cluster selector*/
 directive_module.directive('apolloclusterselector', function ($compile, $window, AppService, AppUtil, toastr) {
     return {
         restrict: 'E',
-        templateUrl: '../../views/component/env-selector.html',
+        templateUrl: AppUtil.prefixPath() + '/views/component/env-selector.html',
         transclude: true,
         replace: true,
         scope: {
@@ -155,8 +130,8 @@ directive_module.directive('apolloclusterselector', function ($compile, $window,
                             cluster.env = env;
                             //default checked
                             cluster.checked = scope.defaultAllChecked ||
-                                              (cluster.env == scope.defaultCheckedEnv && cluster.name
-                                                                                         == scope.defaultCheckedCluster);
+                                (cluster.env == scope.defaultCheckedEnv && cluster.name
+                                    == scope.defaultCheckedCluster);
                             //not checked
                             if (cluster.env == scope.notCheckedEnv && cluster.name == scope.notCheckedCluster) {
                                 cluster.checked = false;
@@ -217,10 +192,10 @@ directive_module.directive('apollorequiredfield', function ($compile, $window) {
 });
 
 /**  确认框 */
-directive_module.directive('apolloconfirmdialog', function ($compile, $window, $sce) {
+directive_module.directive('apolloconfirmdialog', function ($compile, $window, $sce,$translate,AppUtil) {
     return {
         restrict: 'E',
-        templateUrl: '../../views/component/confirm-dialog.html',
+        templateUrl: AppUtil.prefixPath() + '/views/component/confirm-dialog.html',
         transclude: true,
         replace: true,
         scope: {
@@ -229,6 +204,7 @@ directive_module.directive('apolloconfirmdialog', function ($compile, $window, $
             detail: '=apolloDetail',
             showCancelBtn: '=apolloShowCancelBtn',
             doConfirm: '=apolloConfirm',
+            extraClass: '=apolloExtraClass',
             confirmBtnText: '=?',
             cancel: '='
         },
@@ -239,15 +215,15 @@ directive_module.directive('apolloconfirmdialog', function ($compile, $window, $
             });
 
             if (!scope.confirmBtnText) {
-                scope.confirmBtnText = '确认';
+                scope.confirmBtnText = $translate.instant('ApolloConfirmDialog.DefaultConfirmBtnName');
             }
-            
+
             scope.confirm = function () {
                 if (scope.doConfirm) {
                     scope.doConfirm();
                 }
             };
-            
+
 
 
         }
@@ -255,10 +231,10 @@ directive_module.directive('apolloconfirmdialog', function ($compile, $window, $
 });
 
 /** entrance */
-directive_module.directive('apolloentrance', function ($compile, $window) {
+directive_module.directive('apolloentrance', function ($compile, $window,AppUtil) {
     return {
         restrict: 'E',
-        templateUrl: '../../views/component/entrance.html',
+        templateUrl: AppUtil.prefixPath() + '/views/component/entrance.html',
         transclude: true,
         replace: true,
         scope: {
@@ -272,10 +248,10 @@ directive_module.directive('apolloentrance', function ($compile, $window) {
 });
 
 /** entrance */
-directive_module.directive('apollouserselector', function ($compile, $window) {
+directive_module.directive('apollouserselector', function ($compile, $window,AppUtil) {
     return {
         restrict: 'E',
-        templateUrl: '../../views/component/user-selector.html',
+        templateUrl: AppUtil.prefixPath() + '/views/component/user-selector.html',
         transclude: true,
         replace: true,
         scope: {
@@ -288,7 +264,7 @@ directive_module.directive('apollouserselector', function ($compile, $window) {
 
             var select2Options = {
                 ajax: {
-                    url: '/users',
+                    url: AppUtil.prefixPath() + '/users',
                     dataType: 'json',
                     delay: 250,
                     data: function (params) {
@@ -301,9 +277,9 @@ directive_module.directive('apollouserselector', function ($compile, $window) {
                         var users = [];
                         data.forEach(function (user) {
                             users.push({
-                                           id: user.userId,
-                                           text: user.userId + " | " + user.name
-                                       })
+                                id: user.userId,
+                                text: user.userId + " | " + user.name
+                            })
                         });
                         return {
                             results: users
@@ -318,16 +294,16 @@ directive_module.directive('apollouserselector', function ($compile, $window) {
             function initSelect2() {
                 $('.' + scope.id).select2(select2Options);
             }
-            
+
 
         }
     }
 });
 
-directive_module.directive('apollomultipleuserselector', function ($compile, $window) {
+directive_module.directive('apollomultipleuserselector', function ($compile, $window,AppUtil) {
     return {
         restrict: 'E',
-        templateUrl: '../../views/component/multiple-user-selector.html',
+        templateUrl: AppUtil.prefixPath() + '/views/component/multiple-user-selector.html',
         transclude: true,
         replace: true,
         scope: {
@@ -339,7 +315,7 @@ directive_module.directive('apollomultipleuserselector', function ($compile, $wi
 
             var searchUsersAjax = {
                 ajax: {
-                    url: '/users',
+                    url: AppUtil.prefixPath() + '/users',
                     dataType: 'json',
                     delay: 250,
                     data: function (params) {
@@ -352,9 +328,9 @@ directive_module.directive('apollomultipleuserselector', function ($compile, $wi
                         var users = [];
                         data.forEach(function (user) {
                             users.push({
-                                           id: user.userId,
-                                           text: user.userId + " | " + user.name
-                                       })
+                                id: user.userId,
+                                text: user.userId + " | " + user.name
+                            })
                         });
                         return {
                             results: users

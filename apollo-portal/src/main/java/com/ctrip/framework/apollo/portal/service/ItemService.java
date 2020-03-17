@@ -7,7 +7,7 @@ import com.ctrip.framework.apollo.common.dto.NamespaceDTO;
 import com.ctrip.framework.apollo.common.exception.BadRequestException;
 import com.ctrip.framework.apollo.common.utils.BeanUtils;
 import com.ctrip.framework.apollo.core.enums.ConfigFileFormat;
-import com.ctrip.framework.apollo.core.enums.Env;
+import com.ctrip.framework.apollo.portal.environment.Env;
 import com.ctrip.framework.apollo.core.utils.StringUtils;
 import com.ctrip.framework.apollo.portal.api.AdminServiceAPI;
 import com.ctrip.framework.apollo.portal.component.txtresolver.ConfigTextResolver;
@@ -17,8 +17,6 @@ import com.ctrip.framework.apollo.portal.entity.vo.ItemDiffs;
 import com.ctrip.framework.apollo.portal.entity.vo.NamespaceIdentifier;
 import com.ctrip.framework.apollo.portal.spi.UserInfoHolder;
 import com.ctrip.framework.apollo.tracer.Tracer;
-
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,20 +30,24 @@ import java.util.Map;
 @Service
 public class ItemService {
 
-  @Autowired
-  private UserInfoHolder userInfoHolder;
-  @Autowired
-  private AdminServiceAPI.NamespaceAPI namespaceAPI;
-  @Autowired
-  private AdminServiceAPI.ItemAPI itemAPI;
+  private final UserInfoHolder userInfoHolder;
+  private final AdminServiceAPI.NamespaceAPI namespaceAPI;
+  private final AdminServiceAPI.ItemAPI itemAPI;
+  private final ConfigTextResolver fileTextResolver;
+  private final ConfigTextResolver propertyResolver;
 
-  @Autowired
-  @Qualifier("fileTextResolver")
-  private ConfigTextResolver fileTextResolver;
-
-  @Autowired
-  @Qualifier("propertyResolver")
-  private ConfigTextResolver propertyResolver;
+  public ItemService(
+      final UserInfoHolder userInfoHolder,
+      final AdminServiceAPI.NamespaceAPI namespaceAPI,
+      final AdminServiceAPI.ItemAPI itemAPI,
+      final @Qualifier("fileTextResolver") ConfigTextResolver fileTextResolver,
+      final @Qualifier("propertyResolver") ConfigTextResolver propertyResolver) {
+    this.userInfoHolder = userInfoHolder;
+    this.namespaceAPI = namespaceAPI;
+    this.itemAPI = itemAPI;
+    this.fileTextResolver = fileTextResolver;
+    this.propertyResolver = propertyResolver;
+  }
 
 
   /**
@@ -108,8 +110,20 @@ public class ItemService {
     return itemAPI.findItems(appId, env, clusterName, namespaceName);
   }
 
+  public List<ItemDTO> findDeletedItems(String appId, Env env, String clusterName, String namespaceName) {
+    return itemAPI.findDeletedItems(appId, env, clusterName, namespaceName);
+  }
+
   public ItemDTO loadItem(Env env, String appId, String clusterName, String namespaceName, String key) {
     return itemAPI.loadItem(env, appId, clusterName, namespaceName, key);
+  }
+
+  public ItemDTO loadItemById(Env env, long itemId) {
+    ItemDTO item = itemAPI.loadItemById(env, itemId);
+    if (item == null) {
+      throw new BadRequestException("item not found for itemId " + itemId);
+    }
+    return item;
   }
 
   public void syncItems(List<NamespaceIdentifier> comparedNamespaces, List<ItemDTO> sourceItems) {
@@ -163,6 +177,7 @@ public class ItemService {
             "namespace not exist. appId:%s, env:%s, clusterName:%s, namespaceName:%s", appId, env, clusterName,
             namespaceName));
       }
+      throw e;
     }
     return namespaceDTO.getId();
   }
@@ -224,10 +239,10 @@ public class ItemService {
 
     if (sourceComment == null) {
       return !StringUtils.isEmpty(targetComment);
-    } else if (targetComment != null) {
-      return !sourceComment.equals(targetComment);
-    } else {
-      return false;
     }
+    if (targetComment != null) {
+      return !sourceComment.equals(targetComment);
+    }
+    return false;
   }
 }

@@ -1,19 +1,16 @@
 package com.ctrip.framework.apollo.portal.service;
 
-import com.google.gson.Gson;
-
 import com.ctrip.framework.apollo.common.constants.GsonType;
 import com.ctrip.framework.apollo.common.dto.PageDTO;
 import com.ctrip.framework.apollo.common.dto.ReleaseDTO;
 import com.ctrip.framework.apollo.common.dto.ReleaseHistoryDTO;
 import com.ctrip.framework.apollo.common.entity.EntityPair;
 import com.ctrip.framework.apollo.common.utils.BeanUtils;
-import com.ctrip.framework.apollo.core.enums.Env;
+import com.ctrip.framework.apollo.portal.environment.Env;
 import com.ctrip.framework.apollo.portal.api.AdminServiceAPI;
 import com.ctrip.framework.apollo.portal.entity.bo.ReleaseHistoryBO;
 import com.ctrip.framework.apollo.portal.util.RelativeDateFormat;
-
-import org.springframework.beans.factory.annotation.Autowired;
+import com.google.gson.Gson;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,10 +27,13 @@ public class ReleaseHistoryService {
   private Gson gson = new Gson();
 
 
-  @Autowired
-  private AdminServiceAPI.ReleaseHistoryAPI releaseHistoryAPI;
-  @Autowired
-  private ReleaseService releaseService;
+  private final AdminServiceAPI.ReleaseHistoryAPI releaseHistoryAPI;
+  private final ReleaseService releaseService;
+
+  public ReleaseHistoryService(final AdminServiceAPI.ReleaseHistoryAPI releaseHistoryAPI, final ReleaseService releaseService) {
+    this.releaseHistoryAPI = releaseHistoryAPI;
+    this.releaseService = releaseService;
+  }
 
 
   public ReleaseHistoryBO findLatestByReleaseIdAndOperation(Env env, long releaseId, int operation){

@@ -1,9 +1,27 @@
 package com.ctrip.framework.apollo.internals;
 
+import com.ctrip.framework.apollo.build.ApolloInjector;
+import com.ctrip.framework.apollo.core.ConfigConsts;
+import com.ctrip.framework.apollo.core.dto.ApolloConfigNotification;
+import com.ctrip.framework.apollo.core.dto.ApolloNotificationMessages;
+import com.ctrip.framework.apollo.core.dto.ServiceDTO;
+import com.ctrip.framework.apollo.core.enums.ConfigFileFormat;
+import com.ctrip.framework.apollo.core.schedule.ExponentialSchedulePolicy;
+import com.ctrip.framework.apollo.core.schedule.SchedulePolicy;
+import com.ctrip.framework.apollo.core.signature.Signature;
+import com.ctrip.framework.apollo.core.utils.ApolloThreadFactory;
+import com.ctrip.framework.apollo.core.utils.StringUtils;
+import com.ctrip.framework.apollo.exceptions.ApolloConfigException;
+import com.ctrip.framework.apollo.tracer.Tracer;
+import com.ctrip.framework.apollo.tracer.spi.Transaction;
+import com.ctrip.framework.apollo.util.ConfigUtil;
+import com.ctrip.framework.apollo.util.ExceptionUtil;
+import com.ctrip.framework.apollo.util.http.HttpRequest;
+import com.ctrip.framework.apollo.util.http.HttpResponse;
+import com.ctrip.framework.apollo.util.http.HttpUtil;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -13,28 +31,6 @@ import com.google.common.net.UrlEscapers;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.gson.Gson;
-
-import com.ctrip.framework.apollo.build.ApolloInjector;
-import com.ctrip.framework.apollo.core.ConfigConsts;
-import com.ctrip.framework.apollo.core.dto.ApolloConfigNotification;
-import com.ctrip.framework.apollo.core.dto.ApolloNotificationMessages;
-import com.ctrip.framework.apollo.core.dto.ServiceDTO;
-import com.ctrip.framework.apollo.core.enums.ConfigFileFormat;
-import com.ctrip.framework.apollo.core.schedule.ExponentialSchedulePolicy;
-import com.ctrip.framework.apollo.core.schedule.SchedulePolicy;
-import com.ctrip.framework.apollo.core.utils.ApolloThreadFactory;
-import com.ctrip.framework.apollo.exceptions.ApolloConfigException;
-import com.ctrip.framework.apollo.tracer.Tracer;
-import com.ctrip.framework.apollo.tracer.spi.Transaction;
-import com.ctrip.framework.apollo.util.ConfigUtil;
-import com.ctrip.framework.apollo.util.ExceptionUtil;
-import com.ctrip.framework.apollo.util.http.HttpRequest;
-import com.ctrip.framework.apollo.util.http.HttpResponse;
-import com.ctrip.framework.apollo.util.http.HttpUtil;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +40,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Jason Song(song_s@ctrip.com)
@@ -54,6 +52,8 @@ public class RemoteConfigLongPollService {
   private static final Joiner.MapJoiner MAP_JOINER = Joiner.on("&").withKeyValueSeparator("=");
   private static final Escaper queryParamEscaper = UrlEscapers.urlFormParameterEscaper();
   private static final long INIT_NOTIFICATION_ID = ConfigConsts.NOTIFICATION_ID_PLACEHOLDER;
+  //90 seconds, should be longer than server side's long polling timeout, which is now 60 seconds
+  private static final int LONG_POLLING_READ_TIMEOUT = 90 * 1000;
   private final ExecutorService m_longPollingService;
   private final AtomicBoolean m_longPollingStopped;
   private SchedulePolicy m_longPollFailSchedulePolicyInSecond;
@@ -108,6 +108,7 @@ public class RemoteConfigLongPollService {
       final String appId = m_configUtil.getAppId();
       final String cluster = m_configUtil.getCluster();
       final String dataCenter = m_configUtil.getDataCenter();
+      final String secret = m_configUtil.getAccessKeySecret();
       final long longPollingInitialDelayInMills = m_configUtil.getLongPollingInitialDelayInMills();
       m_longPollingService.submit(new Runnable() {
         @Override
@@ -120,7 +121,7 @@ public class RemoteConfigLongPollService {
               //ignore
             }
           }
-          doLongPollingRefresh(appId, cluster, dataCenter);
+          doLongPollingRefresh(appId, cluster, dataCenter, secret);
         }
       });
     } catch (Throwable ex) {
@@ -136,7 +137,7 @@ public class RemoteConfigLongPollService {
     this.m_longPollingStopped.compareAndSet(false, true);
   }
 
-  private void doLongPollingRefresh(String appId, String cluster, String dataCenter) {
+  private void doLongPollingRefresh(String appId, String cluster, String dataCenter, String secret) {
     final Random random = new Random();
     ServiceDTO lastServiceDto = null;
     while (!m_longPollingStopped.get() && !Thread.currentThread().isInterrupted()) {
@@ -160,9 +161,13 @@ public class RemoteConfigLongPollService {
                 m_notifications);
 
         logger.debug("Long polling from {}", url);
+
         HttpRequest request = new HttpRequest(url);
-        //longer timeout for read - 10 minutes
-        request.setReadTimeout(600000);
+        request.setReadTimeout(LONG_POLLING_READ_TIMEOUT);
+        if (!StringUtils.isBlank(secret)) {
+          Map<String, String> headers = Signature.buildHttpHeaders(url, appId, secret);
+          request.setHeaders(headers);
+        }
 
         transaction.addData("Url", url);
 

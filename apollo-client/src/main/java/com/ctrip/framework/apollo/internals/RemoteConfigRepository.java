@@ -1,18 +1,5 @@
 package com.ctrip.framework.apollo.internals;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.ctrip.framework.apollo.Apollo;
 import com.ctrip.framework.apollo.build.ApolloInjector;
 import com.ctrip.framework.apollo.core.ConfigConsts;
@@ -21,7 +8,10 @@ import com.ctrip.framework.apollo.core.dto.ApolloNotificationMessages;
 import com.ctrip.framework.apollo.core.dto.ServiceDTO;
 import com.ctrip.framework.apollo.core.schedule.ExponentialSchedulePolicy;
 import com.ctrip.framework.apollo.core.schedule.SchedulePolicy;
+import com.ctrip.framework.apollo.core.signature.Signature;
 import com.ctrip.framework.apollo.core.utils.ApolloThreadFactory;
+import com.ctrip.framework.apollo.core.utils.StringUtils;
+import com.ctrip.framework.apollo.enums.ConfigSourceType;
 import com.ctrip.framework.apollo.exceptions.ApolloConfigException;
 import com.ctrip.framework.apollo.exceptions.ApolloConfigStatusCodeException;
 import com.ctrip.framework.apollo.tracer.Tracer;
@@ -39,6 +29,17 @@ import com.google.common.escape.Escaper;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.gson.Gson;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Jason Song(song_s@ctrip.com)
@@ -47,21 +48,22 @@ public class RemoteConfigRepository extends AbstractConfigRepository {
   private static final Logger logger = LoggerFactory.getLogger(RemoteConfigRepository.class);
   private static final Joiner STRING_JOINER = Joiner.on(ConfigConsts.CLUSTER_NAMESPACE_SEPARATOR);
   private static final Joiner.MapJoiner MAP_JOINER = Joiner.on("&").withKeyValueSeparator("=");
-  private ConfigServiceLocator m_serviceLocator;
-  private HttpUtil m_httpUtil;
-  private ConfigUtil m_configUtil;
-  private RemoteConfigLongPollService remoteConfigLongPollService;
+  private static final Escaper pathEscaper = UrlEscapers.urlPathSegmentEscaper();
+  private static final Escaper queryParamEscaper = UrlEscapers.urlFormParameterEscaper();
+
+  private final ConfigServiceLocator m_serviceLocator;
+  private final HttpUtil m_httpUtil;
+  private final ConfigUtil m_configUtil;
+  private final RemoteConfigLongPollService remoteConfigLongPollService;
   private volatile AtomicReference<ApolloConfig> m_configCache;
   private final String m_namespace;
   private final static ScheduledExecutorService m_executorService;
-  private AtomicReference<ServiceDTO> m_longPollServiceDto;
-  private AtomicReference<ApolloNotificationMessages> m_remoteMessages;
-  private RateLimiter m_loadConfigRateLimiter;
-  private AtomicBoolean m_configNeedForceRefresh;
-  private SchedulePolicy m_loadConfigFailSchedulePolicy;
-  private Gson gson;
-  private static final Escaper pathEscaper = UrlEscapers.urlPathSegmentEscaper();
-  private static final Escaper queryParamEscaper = UrlEscapers.urlFormParameterEscaper();
+  private final AtomicReference<ServiceDTO> m_longPollServiceDto;
+  private final AtomicReference<ApolloNotificationMessages> m_remoteMessages;
+  private final RateLimiter m_loadConfigRateLimiter;
+  private final AtomicBoolean m_configNeedForceRefresh;
+  private final SchedulePolicy m_loadConfigFailSchedulePolicy;
+  private final Gson gson;
 
   static {
     m_executorService = Executors.newScheduledThreadPool(1,
@@ -103,6 +105,11 @@ public class RemoteConfigRepository extends AbstractConfigRepository {
   @Override
   public void setUpstreamRepository(ConfigRepository upstreamConfigRepository) {
     //remote config doesn't need upstream
+  }
+
+  @Override
+  public ConfigSourceType getSourceType() {
+    return ConfigSourceType.REMOTE;
   }
 
   private void schedulePeriodicRefresh() {
@@ -151,7 +158,7 @@ public class RemoteConfigRepository extends AbstractConfigRepository {
   }
 
   private Properties transformApolloConfigToProperties(ApolloConfig apolloConfig) {
-    Properties result = new Properties();
+    Properties result = propertiesFactory.getPropertiesInstance();
     result.putAll(apolloConfig.getConfigurations());
     return result;
   }
@@ -167,6 +174,7 @@ public class RemoteConfigRepository extends AbstractConfigRepository {
     String appId = m_configUtil.getAppId();
     String cluster = m_configUtil.getCluster();
     String dataCenter = m_configUtil.getDataCenter();
+    String secret = m_configUtil.getAccessKeySecret();
     Tracer.logEvent("Apollo.Client.ConfigMeta", STRING_JOINER.join(appId, cluster, m_namespace));
     int maxRetries = m_configNeedForceRefresh.get() ? 2 : 1;
     long onErrorSleepTime = 0; // 0 means no sleep
@@ -199,7 +207,12 @@ public class RemoteConfigRepository extends AbstractConfigRepository {
                 dataCenter, m_remoteMessages.get(), m_configCache.get());
 
         logger.debug("Loading config from {}", url);
+
         HttpRequest request = new HttpRequest(url);
+        if (!StringUtils.isBlank(secret)) {
+          Map<String, String> headers = Signature.buildHttpHeaders(url, appId, secret);
+          request.setHeaders(headers);
+        }
 
         Transaction transaction = Tracer.newTransaction("Apollo.ConfigService", "queryConfig");
         transaction.addData("Url", url);

@@ -4,17 +4,17 @@ appService.service('ConsumerService', ['$resource', '$q', 'AppUtil',
         create_consumer: {
             method: 'POST',
             isArray: false,
-            url: '/consumers'
+            url: AppUtil.prefixPath() + '/consumers'
         },
         get_consumer_token_by_appId: {
             method: 'GET',
             isArray: false,
-            url: '/consumers/by-appId'
+            url: AppUtil.prefixPath() + '/consumers/by-appId'
         },
         assign_role_to_consumer: {
             method: 'POST',
             isArray: true,
-            url: '/consumers/:token/assign-role'
+            url: AppUtil.prefixPath() + '/consumers/:token/assign-role'
         }
 
     });
@@ -29,11 +29,12 @@ appService.service('ConsumerService', ['$resource', '$q', 'AppUtil',
                 appId: appId
             });
         },
-        assignRoleToConsumer: function (token, type, appId, namespaceName) {
+        assignRoleToConsumer: function (token, type, appId, namespaceName, envs) {
             return AppUtil.ajax(resource.assign_role_to_consumer, 
                                 {
                                     token: token,
-                                    type: type 
+                                    type: type,
+                                    envs: envs
                                 },
                                 {
                                     appId: appId,

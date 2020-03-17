@@ -6,7 +6,7 @@ import com.ctrip.framework.apollo.common.dto.ReleaseDTO;
 import com.ctrip.framework.apollo.common.entity.AppNamespace;
 import com.ctrip.framework.apollo.common.exception.BadRequestException;
 import com.ctrip.framework.apollo.core.enums.ConfigFileFormat;
-import com.ctrip.framework.apollo.core.enums.Env;
+import com.ctrip.framework.apollo.portal.environment.Env;
 import com.ctrip.framework.apollo.portal.AbstractUnitTest;
 import com.ctrip.framework.apollo.portal.api.AdminServiceAPI;
 import com.ctrip.framework.apollo.portal.component.txtresolver.PropertyResolver;
@@ -111,13 +111,18 @@ public class NamespaceServiceTest extends AbstractUnitTest {
 
   }
 
-  @Test(expected = BadRequestException.class)
+  @Test
   public void testDeletePrivateNamespace() {
+    String operator = "user";
     AppNamespace privateNamespace = createAppNamespace(testAppId, testNamespaceName, false);
 
     when(appNamespaceService.findByAppIdAndName(testAppId, testNamespaceName)).thenReturn(privateNamespace);
 
+    when(userInfoHolder.getUser()).thenReturn(createUser(operator));
+
     namespaceService.deleteNamespace(testAppId, testEnv, testClusterName, testNamespaceName);
+
+    verify(namespaceAPI, times(1)).deleteNamespace(testEnv, testAppId, testClusterName, testNamespaceName, operator);
   }
 
   @Test(expected = BadRequestException.class)

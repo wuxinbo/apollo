@@ -3,7 +3,7 @@ package com.ctrip.framework.apollo.portal.spi.ctrip;
 import com.google.gson.Gson;
 
 import com.ctrip.framework.apollo.common.entity.App;
-import com.ctrip.framework.apollo.core.enums.Env;
+import com.ctrip.framework.apollo.portal.environment.Env;
 import com.ctrip.framework.apollo.portal.component.config.PortalConfig;
 import com.ctrip.framework.apollo.portal.entity.bo.ReleaseHistoryBO;
 import com.ctrip.framework.apollo.portal.service.AppService;
@@ -52,7 +52,7 @@ public class CtripMQService implements MQService {
 
     MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter();
     converter.setSupportedMediaTypes(
-        Arrays.asList(MediaType.APPLICATION_JSON, MediaType.APPLICATION_OCTET_STREAM));
+        Arrays.asList(MediaType.APPLICATION_JSON_UTF8, MediaType.APPLICATION_OCTET_STREAM));
 
     restTemplate.setMessageConverters(Arrays.asList(converter, new FormHttpMessageConverter()));
 
@@ -103,7 +103,7 @@ public class CtripMQService implements MQService {
 
   }
 
-  private class PublishMsg {
+  private static class PublishMsg {
 
     private String assginee;
     private String desc;

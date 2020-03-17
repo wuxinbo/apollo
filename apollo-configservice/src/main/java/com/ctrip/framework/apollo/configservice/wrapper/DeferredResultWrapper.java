@@ -3,11 +3,11 @@ package com.ctrip.framework.apollo.configservice.wrapper;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
-import com.ctrip.framework.apollo.core.dto.ApolloConfig;
 import com.ctrip.framework.apollo.core.dto.ApolloConfigNotification;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.web.context.request.async.DeferredResult;
 
 import java.util.List;
@@ -16,8 +16,7 @@ import java.util.Map;
 /**
  * @author Jason Song(song_s@ctrip.com)
  */
-public class DeferredResultWrapper {
-  private static final long TIMEOUT = 30 * 1000;//30 seconds
+public class DeferredResultWrapper implements Comparable<DeferredResultWrapper> {
   private static final ResponseEntity<List<ApolloConfigNotification>>
       NOT_MODIFIED_RESPONSE_LIST = new ResponseEntity<>(HttpStatus.NOT_MODIFIED);
 
@@ -25,8 +24,8 @@ public class DeferredResultWrapper {
   private DeferredResult<ResponseEntity<List<ApolloConfigNotification>>> result;
 
 
-  public DeferredResultWrapper() {
-    result = new DeferredResult<>(TIMEOUT, NOT_MODIFIED_RESPONSE_LIST);
+  public DeferredResultWrapper(long timeoutInMilli) {
+    result = new DeferredResult<>(timeoutInMilli, NOT_MODIFIED_RESPONSE_LIST);
   }
 
   public void recordNamespaceNameNormalizedResult(String originalNamespaceName, String normalizedNamespaceName) {
@@ -65,5 +64,10 @@ public class DeferredResultWrapper {
 
   public DeferredResult<ResponseEntity<List<ApolloConfigNotification>>> getResult() {
     return result;
+  }
+
+  @Override
+  public int compareTo(@NonNull DeferredResultWrapper deferredResultWrapper) {
+    return Integer.compare(this.hashCode(), deferredResultWrapper.hashCode());
   }
 }

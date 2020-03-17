@@ -1,27 +1,38 @@
 package com.ctrip.framework.apollo.common.utils;
 
+import static org.junit.Assert.*;
+
 import org.junit.Test;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
-/**
- * @author Jason Song(song_s@ctrip.com)
- */
 public class InputValidatorTest {
 
   @Test
-  public void testIsValidClusterNamespaceWithCorrectInput() throws Exception {
-    String someValidInput = "a1-b2_c3.d4";
-    assertTrue(InputValidator.isValidClusterNamespace(someValidInput));
+  public void testValidClusterName() throws Exception {
+    checkClusterName("some.cluster-_name.123", true);
+    checkClusterName("some.cluster-_name.123.yml", true);
+    checkClusterName("some.&.name", false);
+    checkClusterName("", false);
+    checkClusterName(null, false);
   }
 
   @Test
-  public void testIsValidClusterNamespaceWithInCorrectInput() throws Exception {
-    String someInvalidInput = "中文123";
-    assertFalse(InputValidator.isValidClusterNamespace(someInvalidInput));
+  public void testValidAppNamespaceName() throws Exception {
+    checkAppNamespaceName("some.cluster-_name.123", true);
+    checkAppNamespaceName("some.&.name", false);
+    checkAppNamespaceName("", false);
+    checkAppNamespaceName(null, false);
+    checkAppNamespaceName("some.name.json", false);
+    checkAppNamespaceName("some.name.yml", false);
+    checkAppNamespaceName("some.name.yaml", false);
+    checkAppNamespaceName("some.name.xml", false);
+    checkAppNamespaceName("some.name.properties", false);
+  }
 
-    String anotherInvalidInput = "123@#{}";
-    assertFalse(InputValidator.isValidClusterNamespace(anotherInvalidInput));
+  private void checkClusterName(String name, boolean valid) {
+    assertEquals(valid, InputValidator.isValidClusterNamespace(name));
+  }
+
+  private void checkAppNamespaceName(String name, boolean valid) {
+    assertEquals(valid, InputValidator.isValidAppNamespace(name));
   }
 }

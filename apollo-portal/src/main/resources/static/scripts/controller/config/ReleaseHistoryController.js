@@ -1,10 +1,10 @@
 release_history_module.controller("ReleaseHistoryController",
-                                  ['$scope', '$location', 'AppUtil',
-                                   'ReleaseService', 'ConfigService', 'ReleaseHistoryService', releaseHistoryController
-                                  ]);
+    ['$scope', '$location', '$translate', 'AppUtil',
+        'ReleaseService', 'ConfigService', 'ReleaseHistoryService', releaseHistoryController
+    ]);
 
-function releaseHistoryController($scope, $location, AppUtil,
-                                  ReleaseService, ConfigService, ReleaseHistoryService) {
+function releaseHistoryController($scope, $location, $translate, AppUtil,
+    ReleaseService, ConfigService, ReleaseHistoryService) {
 
     var params = AppUtil.parseParams($location.$$url);
     $scope.pageContext = {
@@ -26,6 +26,8 @@ function releaseHistoryController($scope, $location, AppUtil,
     $scope.hasLoadAll = false;
     $scope.selectedReleaseHistory = 0;
     $scope.isTextNamespace = false;
+    // whether current user can view config
+    $scope.isConfigHidden = false;
 
     $scope.showReleaseHistoryDetail = showReleaseHistoryDetail;
     $scope.switchConfigViewType = switchConfigViewType;
@@ -46,10 +48,10 @@ function releaseHistoryController($scope, $location, AppUtil,
             return;
         }
         ReleaseHistoryService.findReleaseHistoryByNamespace($scope.pageContext.appId,
-                                                            $scope.pageContext.env,
-                                                            $scope.pageContext.clusterName,
-                                                            $scope.pageContext.namespaceName,
-                                                            $scope.page, PAGE_SIZE)
+            $scope.pageContext.env,
+            $scope.pageContext.clusterName,
+            $scope.pageContext.namespaceName,
+            $scope.page, PAGE_SIZE)
             .then(function (result) {
                 if ($scope.page == 0) {
                     $(".release-history").removeClass('hidden');
@@ -73,7 +75,7 @@ function releaseHistoryController($scope, $location, AppUtil,
                         } else if ($scope.pageContext.releaseId == history.releaseId) {
                             // text namespace doesn't support ALL view
                             if (!$scope.isTextNamespace) {
-                              history.viewType = CONFIG_VIEW_TYPE.ALL;
+                                history.viewType = CONFIG_VIEW_TYPE.ALL;
                             }
                             defaultToShowReleaseHistory = history;
                         }
@@ -85,20 +87,21 @@ function releaseHistoryController($scope, $location, AppUtil,
                 $scope.page = $scope.page + 1;
 
             }, function (result) {
-                AppUtil.showErrorMsg(result, "加载发布历史信息出错");
+                AppUtil.showErrorMsg(result, $translate.instant('Config.History.LoadingHistoryError'));
             });
     }
 
     function loadNamespace() {
         ConfigService.load_namespace($scope.pageContext.appId,
-                                     $scope.pageContext.env,
-                                     $scope.pageContext.clusterName,
-                                     $scope.pageContext.namespaceName)
+            $scope.pageContext.env,
+            $scope.pageContext.clusterName,
+            $scope.pageContext.namespaceName)
             .then(function (result) {
                 $scope.isTextNamespace = result.format != "properties";
                 if ($scope.isTextNamespace) {
-                  fixTextNamespaceViewType();
+                    fixTextNamespaceViewType();
                 }
+                $scope.isConfigHidden = result.isConfigHidden;
             })
     }
 
@@ -114,12 +117,12 @@ function releaseHistoryController($scope, $location, AppUtil,
     }
 
     function fixTextNamespaceViewType() {
-      $scope.releaseHistories.forEach(function (history) {
-          // text namespace doesn't support ALL view
-          if (history.viewType == CONFIG_VIEW_TYPE.ALL) {
-            switchConfigViewType(history, CONFIG_VIEW_TYPE.DIFF);
-          }
-      });
+        $scope.releaseHistories.forEach(function (history) {
+            // text namespace doesn't support ALL view
+            if (history.viewType == CONFIG_VIEW_TYPE.ALL) {
+                switchConfigViewType(history, CONFIG_VIEW_TYPE.DIFF);
+            }
+        });
     }
 
     function switchConfigViewType(history, viewType) {
@@ -141,8 +144,8 @@ function releaseHistoryController($scope, $location, AppUtil,
             }
 
             ReleaseService.compare($scope.pageContext.env,
-                                   history.previousReleaseId,
-                                   history.releaseId)
+                history.previousReleaseId,
+                history.releaseId)
                 .then(function (result) {
                     history.changes = result.changes;
                 })

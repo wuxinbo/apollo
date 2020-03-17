@@ -45,10 +45,10 @@ public class InstanceConfigAuditUtil implements InitializingBean {
   private Cache<String, Long> instanceCache;
   private Cache<String, String> instanceConfigReleaseKeyCache;
 
-  @Autowired
-  private InstanceService instanceService;
+  private final InstanceService instanceService;
 
-  public InstanceConfigAuditUtil() {
+  public InstanceConfigAuditUtil(final InstanceService instanceService) {
+    this.instanceService = instanceService;
     auditExecutorService = Executors.newSingleThreadExecutor(
         ApolloThreadFactory.create("InstanceConfigAuditUtil", true));
     auditStopped = new AtomicBoolean(false);
@@ -242,8 +242,12 @@ public class InstanceConfigAuditUtil implements InitializingBean {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+          return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+          return false;
+      }
       InstanceConfigAuditModel model = (InstanceConfigAuditModel) o;
       return Objects.equals(appId, model.appId) &&
           Objects.equals(clusterName, model.clusterName) &&
